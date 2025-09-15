@@ -1,26 +1,59 @@
 
+
 name: Dev env infra
 
 on:
   push:
     branches:
       - dev
-  # pull_request:
-  #   branches:
-  #     - main
+    pull_request:
+      branches:
+        - main
 
 jobs:
-  terraform-dev:
+  terraform-plan:
     if: github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
 
     steps: 
       - name: Checkout code
         uses: actions/checkout@v4
+      
+      - name: Ensure .gitignore exists
+        run: |
+          cat << 'EOF' > .gitignore
+          # Terraform local files
+          **/.terraform/*
+          *.tfstate
+          *.tfstate.*
+          *.tfvars
+          crash.log
+          override.tf
+          override.tf.json
+          *_override.tf
+          *_override.tf.json
 
+          # Terraform plan files
+          tfplan
+          *.tfplan
+
+          # Provider binaries
+          .terraform.lock.hcl
+          EOF
+
+      - name: Resolve .gitignore conflict automatically
+        if: failure()
+        run: |
+          if git status | grep -q '.gitignore'; then
+            git rm .gitignore || true
+            git add .gitignore || true
+            git cherry-pick --continue || true
+          fi
+
+          
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -69,5 +102,43 @@ jobs:
             - Workflow: ${{ github.workflow }}
             - Run ID: ${{ github.run_id }}
           base: main
-          exclude: |
-            env/dev/.terraform/**
+      
+  jobbs:
+     terraform apply:
+     if: github.event_name =='pull_request' && github.base == 'main'
+     runs-on: ubuntu-latest
+     needs: terraform-plan
+     permissions:
+      contents: read
+      pull-requests: write
+
+      steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Init
+        run: terraform -chdir=env/dev init -input=false
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-dev-${{ github.run_id }}
+          path: env/dev/
+
+      - name: Terraform Apply
+        run: terraform -chdir=env/dev apply -input=false tfplan
+      
+     
+     
