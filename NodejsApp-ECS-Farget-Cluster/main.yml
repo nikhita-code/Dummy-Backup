@@ -31,13 +31,40 @@ jobs:
     name: build image and push to ECR 
     id: build-image
     runs: |
+      IMAGE_URI= $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
       docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
       docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+      echo "image=$IMAGE_URI" >> $GITHUB_OUTPUT
 
     name: fill the new imageid in AWS ECS task desfination
-    id: task-def
+    id: task-defi
     uses: aws-actions/amazon-ecs-render-task-defination@v1
-    runs: |
+    with: |
+      task-defination: ecs/task-defination.json
+      continer_name: nodejsapp-container
+      image: ${{ steps.build-image.outputs.image }}
+
+    name: deploy ecs task-defination
+    id: deploy
+    with: |
+      task-defination: ${{ steps.task-defi.outputs.task-defination }}
+      service: nodejsapp-service
+      cluster: nodejsapp-cluster
+      wait-for-service-stability: true
+
+
+
+
+
+
+
+
+
+
+
+     
+      
+
       
     
     
