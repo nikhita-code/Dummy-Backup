@@ -3,7 +3,7 @@
   "networkMode": "awsvpc",
   "containerDefinitions": [
     {
-      "name": "ecs-devops-sandbox",
+      "name": "nodejsapp-container",
       "image": "REPLACE_ME", 
       "essential": true,
       "portMappings": [
